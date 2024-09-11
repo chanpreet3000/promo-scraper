@@ -40,14 +40,17 @@ async def on_ready():
 
 @client.tree.command(name='add_amazon_search', description='Add a new Amazon product search term')
 async def add_amazon_search(interaction: discord.Interaction, search_term: str):
+    Logger.info('Adding search term Command invoked')
     await interaction.response.defer()
     await add_search(search_term)
     embed = discord.Embed(title="Success", description=f"Added: {search_term}", color=discord.Color.green())
     await interaction.followup.send(embed=embed)
+    Logger.info('Added search term Command completed')
 
 
 @client.tree.command(name='remove_amazon_search', description='Remove an existing Amazon product search term')
 async def remove_amazon_search(interaction: discord.Interaction, search_term: str):
+    Logger.info('Removing search term Command invoked')
     await interaction.response.defer()
     removed = await remove_search(search_term)
     if removed:
@@ -56,13 +59,16 @@ async def remove_amazon_search(interaction: discord.Interaction, search_term: st
         embed = discord.Embed(title="Not Found", description=f"Term not found: {search_term}",
                               color=discord.Color.orange())
     await interaction.followup.send(embed=embed)
+    Logger.info('Removed search term Command completed')
 
 
 @client.tree.command(name='list_amazon_searches', description='List all saved Amazon product search terms')
 async def list_amazon_searches(interaction: discord.Interaction):
+    Logger.info('Listing search terms Command invoked')
     await interaction.response.defer()
     searches = await get_all_searches()
     search_list = '\n'.join(searches) if searches else "No search terms found."
     embed = discord.Embed(title="Amazon Search Terms", description=search_list, color=discord.Color.blue())
     embed.set_footer(text=f"Total search terms: {len(searches)}")
     await interaction.followup.send(embed=embed)
+    Logger.info('Listing search terms Command completed')

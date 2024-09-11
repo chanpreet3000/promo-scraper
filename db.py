@@ -15,7 +15,7 @@ async def connect_to_database():
     global client, db, collection
     try:
         Logger.info('Connecting to the database')
-        client = AsyncIOMotorClient(os.getenv('MONGO_URI'), serverSelectionTimeoutMS=5000)
+        client = AsyncIOMotorClient(os.getenv('MONGO_URI'), serverSelectionTimeoutMS=10000)
         await client.server_info()
         db = client['PromoBot']
         collection = db['Searches']
@@ -25,14 +25,24 @@ async def connect_to_database():
 
 
 async def add_search(search_text):
+    Logger.info(f"Adding search term: {search_text}")
     await collection.insert_one({"text": search_text})
+    Logger.info(f"Added search term: {search_text}")
 
 
 async def remove_search(search_text):
+    Logger.info(f"Removing search term: {search_text}")
     result = await collection.delete_one({"text": search_text})
-    return result.deleted_count > 0
+    is_deleted = result.deleted_count > 0
+    if is_deleted:
+        Logger.info(f"Removed search term: {search_text}")
+    else:
+        Logger.info(f"Search term not found: {search_text}")
+    return is_deleted
 
 
 async def get_all_searches():
     cursor = collection.find()
-    return [doc['text'] async for doc in cursor]
+    searches = [doc['text'] async for doc in cursor]
+    Logger.info(f"Found {len(searches)} search terms")
+    return searches
