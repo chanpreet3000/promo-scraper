@@ -1,10 +1,8 @@
-import asyncio
 import urllib.parse
 from playwright.async_api import async_playwright
 
 import db
-from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, TOTAL_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE, \
-    DELAY_BETWEEN_PROMO_SEARCHES, DELAY_BETWEEN_PROMO
+from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, TOTAL_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE
 from db import get_all_searches
 from logger import Logger
 from utils import sleep_randomly, get_browser
@@ -145,7 +143,7 @@ async def scrape_from_promo_code(promo_code: str) -> dict:
 
         for search in search_list:
             try:
-                await sleep_randomly(DELAY_BETWEEN_PROMO_SEARCHES)
+                await sleep_randomly(DELAY_BETWEEN_SEARCHES)
                 Logger.info(f"Searching for '{search}' with promo code: {promo_code}")
                 # Input search term
                 await page.fill('#keywordSearchInputText', search)
@@ -154,35 +152,22 @@ async def scrape_from_promo_code(promo_code: str) -> dict:
 
                 # Wait for the search results to load
                 await page.wait_for_load_state('networkidle')
-                await sleep_randomly(7, 0.5)
+                await sleep_randomly(7, 1)
 
-                product_details = await page.evaluate('''
+                product_url = await page.evaluate('''
                     () => {
                         // Select all product cards within the div
                         const productCards = Array.from(document.querySelectorAll('#productInfoList > li.productGrid'));
 
                         return productCards.map(card => {
-                            // Get the product image URL
-                            const imgElement = card.querySelector('div.productImageBox img');
-                            const product_img = imgElement ? imgElement.src : null;
-
-                            // Get the product title
                             const titleElement = card.querySelector('div.productTitleBox a');
-                            const product_title = titleElement ? titleElement.textContent.trim() : null;
-
-                            // Get the product URL
                             const product_url = titleElement ? titleElement.href : null;
-
-                            return {
-                                product_img,
-                                product_title,
-                                product_url,
-                            };
+                            return product_url;
                         });
                     }
                 ''')
 
-                all_products.extend(product_details)
+                all_products.extend(product_url)
 
                 Logger.info(f'Fetched all products for search term: {search} and promo code: {promo_code}')
             except Exception as e:
@@ -206,35 +191,115 @@ async def scrape_from_promo_codes(promo_codes) -> dict:
     for promo_code in promo_codes:
         data = await scrape_from_promo_code(promo_code)
         promo_and_product_dict[promo_code] = data
-        await sleep_randomly(DELAY_BETWEEN_PROMO)
+        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
 
     Logger.info('Finished Scraping from promo codes')
     return promo_and_product_dict
 
 
-async def main():
+async def scrape_promo_products(promo_products_dict: dict) -> dict:
+    async with async_playwright() as p:
+        Logger.info('Scraping promo products')
+        promo_products_details_map = promo_products_dict.copy()
+
+        browser = await get_browser(p)
+        page = await browser.new_page()
+
+        for promo_code, value in promo_products_dict.items():
+            products = []
+            for product_link in value['products']:
+                try:
+                    await sleep_randomly(DELAY_BETWEEN_LINKS)
+                    Logger.info(f"Scraping product {product_link}")
+                    await page.goto(product_link)
+
+                    product = await page.evaluate('''
+                        () => {
+                            const product_title = document.querySelector('#productTitle').innerText;
+                            const product_url = window.location.href;
+                            const product_img = document.querySelector('#landingImage').src;
+                            
+                            // Get the ASIN (extracted from the product URL)
+                            const asin = product_url ? product_url.match(/\/dp\/(\\w+)/) ? product_url.match(/\/dp\/(\\w+)/)[1] : null : null;
+
+                            // Get the current price
+                            const priceElement = document.querySelector('#corePriceDisplay_desktop_feature_div .reinventPricePriceToPayMargin');
+                            const current_price = priceElement ? priceElement.textContent.trim() : null;
+
+                            // Get sales in last month
+                            const salesElement = document.querySelector('#social-proofing-faceout-title-tk_bought');
+                            const sales_last_month_raw = salesElement ? salesElement.textContent.trim() : 'N/A';
+                        
+                            // Function to convert sales string to number
+                            const convertSales = (salesStr) => {
+                                const match = salesStr.match(/(\d+)([KM]?)\+/);
+                                if (match) {
+                                    const number = parseInt(match[1]);
+                                    const unit = match[2];
+                                    if (unit === 'K') {
+                                        return number * 1000;
+                                    } else if (unit === 'M') {
+                                        return number * 1000000;
+                                    } else {
+                                        return number;
+                                    }
+                                }
+                                return 0;
+                            };
+                        
+                            // Convert sales_last_month to number
+                            const sales_last_month = convertSales(sales_last_month_raw);
+                        
+                            return {
+                                product_img,
+                                product_title,
+                                product_url,
+                                asin,
+                                current_price,
+                                sales_last_month
+                            };
+                        }
+                    ''')
+                    products.append(product)
+                except Exception as e:
+                    Logger.error(f"Error scraping product {product_link}", e)
+
+            promo_products_details_map[promo_code]['products'] = products
+
+        await browser.close()
+        Logger.info('Finished scraping promo products')
+
+        return promo_products_details_map
+
+
+async def startBot():
     await db.connect_to_database()
 
-    await setup_amazon_uk()
+    retry_count = 3
+    delay = 30
 
-    Logger.info("Starting scraping for all products from searches")
-    product_links = await scrape_all_searches()
-    Logger.info(f"Scraping complete. Found {len(product_links)} product links.")
+    for attempt in range(retry_count):
+        try:
+            # Attempt to execute the scraping process
+            promo_products_dict = await scrape_from_promo_codes({'A237B13EQ96M7B'})
+            Logger.info('Products Links Fetched from All Promo Codes', promo_products_dict)
 
-    Logger.info("Starting scraping for promo codes")
-    promo_codes = await scrape_product_from_links(product_links)
-    Logger.info(f"Found {len(promo_codes)} promo codes", promo_codes)
+            promo_products_details_dict = await scrape_promo_products(promo_products_dict)
+            Logger.info('Promo Products Details Fetched', promo_products_details_dict)
 
-    promo_and_product_dict = await scrape_from_promo_codes(promo_codes)
-    Logger.info('Scraping complete', promo_and_product_dict)
+            # Return the result if successful
+            return promo_products_details_dict
 
+        except Exception as e:
+            Logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
 
-# Test Promo codes
-# {'A237B13EQ96M7B',
-#  'A2P1ZTFRNJUUMV',
-#  'A2PGR4VI4CPO26',
-#  'A2S8TQ1DMNONDY',
-#  'A71VQZ3KSA8IY',
-#  'A98ZJPT0I731L'}
-if __name__ == "__main__":
-    asyncio.run(main())
+            # If this was the last attempt, raise the exception
+            if attempt == retry_count - 1:
+                Logger.error(f"All {retry_count} attempts failed. Aborting.")
+                raise
+
+            # Otherwise, wait for 30 seconds before retrying
+            Logger.info(f"Retrying in {delay} seconds...")
+            await sleep_randomly(delay, 2)
+
+    return None
