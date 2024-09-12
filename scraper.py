@@ -12,28 +12,23 @@ from utils import sleep_randomly, get_browser
 
 async def scrape_search(page, search_term):
     all_product_links = []
-
     for page_num in range(1, TOTAL_PAGES_TO_SCRAPE + 1):
         try:
             Logger.info(f"Scraping page {page_num} for '{search_term}'")
-
             encoded_search_term = urllib.parse.quote(search_term)
             await page.goto(f"https://www.amazon.co.uk/s?k={encoded_search_term}&page={page_num}")
-
             # Wait for the results to load
             await page.wait_for_selector('.s-main-slot')
 
-            # Extract product links from the current page
+            # Extract product links only for products with promotions
             product_links = await page.eval_on_selector_all(
-                'a.a-link-normal.s-no-outline',
+                '.s-result-item:has(.s-coupon-unclipped) a.a-link-normal.s-no-outline',
                 "elements => elements.map(el => el.href)"
             )
             all_product_links.extend(product_links)
-
             await sleep_randomly(DELAY_BETWEEN_PAGES)
         except Exception as e:
             Logger.error(f"Error scraping page {page_num} for '{search_term}'", e)
-
     return list(set(all_product_links))
 
 
