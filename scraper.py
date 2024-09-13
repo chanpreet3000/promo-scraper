@@ -246,6 +246,7 @@ async def startScraper() -> tuple[list[dict], int]:
             await sleep_randomly(DELAY_BETWEEN_STEPS)
 
             product_details = await scrape_promo_product_details_in_batch(product_links)
+            product_details = list(set(product_details))
             await sleep_randomly(DELAY_BETWEEN_STEPS)
 
             filtered_products = await process_products(product_details)
