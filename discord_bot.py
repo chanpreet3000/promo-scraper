@@ -94,7 +94,7 @@ async def on_ready():
     amazon_cron.start()
 
 
-@client.tree.command(name='add_amazon_search', description='Add a new Amazon product search term')
+@client.tree.command(name='ap_add_amazon_search', description='Add a new Amazon product search term')
 async def add_amazon_search(interaction: discord.Interaction, search_term: str):
     Logger.info('Adding search term Command invoked')
     await interaction.response.defer()
@@ -104,7 +104,7 @@ async def add_amazon_search(interaction: discord.Interaction, search_term: str):
     Logger.info('Added search term Command completed')
 
 
-@client.tree.command(name='remove_amazon_search', description='Remove an existing Amazon product search term')
+@client.tree.command(name='ap_remove_amazon_search', description='Remove an existing Amazon product search term')
 async def remove_amazon_search(interaction: discord.Interaction, search_term: str):
     Logger.info('Removing search term Command invoked')
     await interaction.response.defer()
@@ -118,7 +118,7 @@ async def remove_amazon_search(interaction: discord.Interaction, search_term: st
     Logger.info('Removed search term Command completed')
 
 
-@client.tree.command(name='list_amazon_searches', description='List all saved Amazon product search terms')
+@client.tree.command(name='ap_list_amazon_searches', description='List all saved Amazon product search terms')
 async def list_amazon_searches(interaction: discord.Interaction):
     Logger.info('Listing search terms Command invoked')
     await interaction.response.defer()
@@ -130,7 +130,7 @@ async def list_amazon_searches(interaction: discord.Interaction):
     Logger.info('Listing search terms Command completed')
 
 
-@client.tree.command(name="set_channel", description="Set the channel for stock notifications")
+@client.tree.command(name="ap_set_channel", description="Set the channel for stock notifications")
 @app_commands.checks.has_permissions(administrator=True)
 async def set_channel(interaction: discord.Interaction):
     Logger.info(f"Setting notification channel: {interaction.channel.id}")
@@ -144,7 +144,7 @@ async def set_channel(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-@client.tree.command(name="set_monthly_sales_cutoff",
+@client.tree.command(name="ap_set_monthly_sales_cutoff",
                      description="Set the minimum monthly sales cutoff for notifications")
 @app_commands.checks.has_permissions(administrator=True)
 async def set_monthly_sales_cutoff(interaction: discord.Interaction, cutoff: int):
@@ -159,7 +159,7 @@ async def set_monthly_sales_cutoff(interaction: discord.Interaction, cutoff: int
     await interaction.response.send_message(embed=embed)
 
 
-@client.tree.command(name="get_monthly_sales_cutoff",
+@client.tree.command(name="ap_get_monthly_sales_cutoff",
                      description="Get the current minimum monthly sales cutoff for notifications")
 async def get_monthly_sales_cutoff(interaction: discord.Interaction):
     cutoff = data_manager.get_monthly_sales_cutoff()
