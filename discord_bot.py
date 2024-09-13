@@ -28,7 +28,10 @@ async def send_promo_notification_to_discord(channel, promo_code: str, promo_dat
         ).set_thumbnail(url=product['product_img'])
 
         embed.add_field(name="Current Price", value=product['current_price'] or 'N/A', inline=True)
-        embed.add_field(name="Sales Last Month", value=product['sales_last_month'] or 'N/A', inline=True)
+        embed.add_field(name="Sales This Month", value=f"{product['sales_last_month']}+ this month" or 'N/A',
+                        inline=True)
+        embed.add_field(name="Promo", value=f"[{promo_data['title']}]({promo_data['promotion_url']})",
+                        inline=True)
 
         return embed
 
