@@ -6,6 +6,7 @@ from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, TOTAL_PAGES_TO_S
     SCRAPER_RETRIES, SCRAPER_RETRIES_DELAY
 from db import get_all_searches
 from logger import Logger
+from proxy_manager import ProxyManager
 from utils import sleep_randomly, get_browser
 
 
@@ -287,6 +288,13 @@ async def scrape_promo_products_details(promo_products_dict: dict) -> dict:
 
 
 async def startBot():
+    Logger.info('Starting the bot')
+
+    Logger.info('Fetching Proxies')
+    proxy_manager = ProxyManager()
+    proxy_manager.initialize_proxies()
+    Logger.info(f'Proxies Fetched & tested. Only {len(proxy_manager.get_proxies())} working proxies available')
+
     await db.connect_to_database()
 
     for attempt in range(SCRAPER_RETRIES):
@@ -297,13 +305,11 @@ async def startBot():
 
             promo_codes = await scrape_promo_from_promo_products(product_links)
 
-            # promo_products_dict = await scrape_from_promo_codes({'A237B13EQ96M7B'})
             promo_products_dict = await scrape_links_from_promo_codes(promo_codes)
 
             promo_products_details_dict = await scrape_promo_products_details(promo_products_dict)
             Logger.info('Promo Products Details Fetched', promo_products_details_dict)
 
-            # Return the result if successful
             return promo_products_details_dict
 
         except Exception as e:

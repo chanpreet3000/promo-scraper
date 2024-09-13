@@ -177,7 +177,7 @@ async def get_monthly_sales_cutoff(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-@tasks.loop(seconds=60 * 60 * 24)
+@tasks.loop(seconds=60 * 60 * 2)
 async def amazon_cron():
     try:
         Logger.info("Starting scheduled Cron")
@@ -206,6 +206,6 @@ async def amazon_cron():
 
         await channel.send(content=f'@here Please check the above products with promotions.\n**{get_current_time()}**')
 
-        Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 24} seconds.")
+        Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 2} seconds.")
     except Exception as e:
         Logger.critical("An error occurred in scheduled cron", e)
