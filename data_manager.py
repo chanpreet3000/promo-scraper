@@ -18,11 +18,12 @@ class DataManager:
             with open(self.filename, 'r') as file:
                 data = json.load(file)
                 return {
-                    'channel': data.get('channel', None)
+                    'channel': data.get('channel', None),
+                    'monthly_sales_cutoff': data.get('monthly_sales_cutoff', 100)
                 }
         except FileNotFoundError:
             Logger.warn(f"Database file {self.filename} not found. Initializing with empty data.")
-            return {'channel': None}
+            return {'channel': None, 'monthly_sales_cutoff': 100}
         except json.JSONDecodeError as error:
             Logger.error('Error initializing DataManager:', error)
             raise
@@ -32,7 +33,8 @@ class DataManager:
         try:
             with open(self.filename, 'w') as file:
                 json.dump({
-                    'channel': self.data['channel']
+                    'channel': self.data['channel'],
+                    'monthly_sales_cutoff': self.data['monthly_sales_cutoff']
                 }, file, indent=2)
         except IOError as error:
             Logger.error('Error saving data:', error)
@@ -47,3 +49,13 @@ class DataManager:
     def get_notification_channel(self):
         """Get the channel ID for notifications."""
         return self.data['channel']
+
+    def set_monthly_sales_cutoff(self, cutoff):
+        """Set the minimum monthly sales cutoff."""
+        Logger.info(f"Setting monthly sales cutoff: {cutoff}")
+        self.data['monthly_sales_cutoff'] = cutoff
+        self.save()
+
+    def get_monthly_sales_cutoff(self):
+        """Get the minimum monthly sales cutoff."""
+        return self.data['monthly_sales_cutoff']

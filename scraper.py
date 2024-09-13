@@ -280,6 +280,17 @@ async def startBot():
 
     for attempt in range(retry_count):
         try:
+
+            # await setup_amazon_uk()
+            #
+            # Logger.info("Starting scraping for all products from searches")
+            # product_links = await scrape_all_searches()
+            # Logger.info(f"Scraping complete. Found {len(product_links)} product links.")
+            #
+            # Logger.info("Starting scraping for promo codes")
+            # promo_codes = await scrape_product_from_links(product_links)
+            # Logger.info(f"Found {len(promo_codes)} promo codes", promo_codes)
+
             # Attempt to execute the scraping process
             promo_products_dict = await scrape_from_promo_codes({'A237B13EQ96M7B'})
             Logger.info('Products Links Fetched from All Promo Codes', promo_products_dict)

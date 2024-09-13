@@ -3,10 +3,11 @@ from math import ceil
 
 import discord
 from discord import app_commands
+from discord.ext import tasks
 
 from config import DISCORD_MESSAGE_DELAY
 from data_manager import DataManager
-from db import add_search, remove_search, get_all_searches
+from db import add_search, remove_search, get_all_searches, get_recent_products, upsert_product
 
 from logger import Logger
 from scraper import startBot
@@ -88,10 +89,7 @@ client = AmazonSearchBot()
 @client.event
 async def on_ready():
     Logger.info(f'Logged in as {client.user} (ID: {client.user.id})')
-    promo_products_details_dict = await startBot()
-    for promo_code, value in promo_products_details_dict.items():
-        await send_promo_notification_to_discord(promo_code, value)
-
+    # watched_products_stock_cron.start()
 
 
 @client.tree.command(name='add_amazon_search', description='Add a new Amazon product search term')
@@ -142,3 +140,61 @@ async def set_channel(interaction: discord.Interaction):
         color=discord.Color.green()
     )
     await interaction.response.send_message(embed=embed)
+
+
+@client.tree.command(name="set_monthly_sales_cutoff",
+                     description="Set the minimum monthly sales cutoff for notifications")
+@app_commands.checks.has_permissions(administrator=True)
+async def set_monthly_sales_cutoff(interaction: discord.Interaction, cutoff: int):
+    Logger.info(f"Setting monthly sales cutoff: {cutoff}")
+    data_manager.set_monthly_sales_cutoff(cutoff)
+
+    embed = discord.Embed(
+        title="✅ Monthly Sales Cutoff Set",
+        description=f"The minimum monthly sales cutoff has been set to {cutoff}.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+@client.tree.command(name="get_monthly_sales_cutoff",
+                     description="Get the current minimum monthly sales cutoff for notifications")
+async def get_monthly_sales_cutoff(interaction: discord.Interaction):
+    cutoff = data_manager.get_monthly_sales_cutoff()
+    Logger.info(f"Getting monthly sales cutoff: {cutoff}")
+
+    embed = discord.Embed(
+        title="📊 Current Monthly Sales Cutoff",
+        description=f"The current minimum monthly sales cutoff is set to {cutoff}.",
+        color=discord.Color.blue()
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+@tasks.loop(seconds=60 * 60 * 24)
+async def watched_products_stock_cron():
+    try:
+        Logger.info("Starting scheduled Cron")
+
+        promo_products_details_dict = await startBot()
+        recent_products = await get_recent_products(days=7)
+
+        filtered_promo_products = {}
+
+        # Filter the products
+        for promo_code, value in promo_products_details_dict.items():
+            filtered_products = []
+            for product in value['products']:
+                if product['asin'] not in recent_products and product[
+                    'sales_last_month'] >= data_manager.get_monthly_sales_cutoff():
+                    await upsert_product(product['asin'], promo_code)
+                    filtered_products.append(product)
+
+            filtered_promo_products[promo_code] = {**value, 'products': filtered_products}
+
+        for promo_code, value in filtered_promo_products.items():
+            await send_promo_notification_to_discord(promo_code, value)
+
+        Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 24} seconds.")
+    except Exception as e:
+        Logger.critical("An error occurred in scheduled cron", e)
