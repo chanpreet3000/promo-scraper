@@ -72,8 +72,9 @@ async def scrape_promo_from_promo_products(product_links):
                 Logger.info(f"Finding promo code from product", link)
                 await page.goto(link)
 
-                promo_element = await page.query_selector('.promoPriceBlockMessage > div')
-                if promo_element:
+                promo_elements = await page.query_selector_all('.promoPriceBlockMessage > div')
+
+                for promo_element in promo_elements:
                     content_id = await promo_element.get_attribute('data-csa-c-content-id')
                     if content_id and content_id.startswith('/promo/'):
                         promo_code = content_id.split('/promo/')[1]

@@ -5,8 +5,6 @@ import random
 from datetime import datetime
 from dotenv import load_dotenv
 
-from proxy_manager import ProxyManager
-
 load_dotenv()
 
 
@@ -38,9 +36,9 @@ async def get_browser(p):
     latitude = 51.2150 + random.uniform(-0.05, 0.05)
     longitude = -0.7986 + random.uniform(-0.05, 0.05)
 
-    proxy_manager = ProxyManager()
-    proxy = proxy_manager.get_random_proxy()
-    proxy_server = f"http://{proxy[0]}:{proxy[1]}"
+    # proxy_manager = ProxyManager()
+    # proxy = proxy_manager.get_random_proxy()
+    # proxy_server = f"http://{proxy[0]}:{proxy[1]}"
 
     browser = await p.chromium.launch_persistent_context(
         user_data_dir=user_data_dir,
