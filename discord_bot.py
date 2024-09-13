@@ -11,13 +11,12 @@ from db import add_search, remove_search, get_all_searches, get_recent_products,
 
 from logger import Logger
 from scraper import startBot
+from utils import get_current_time
 
 data_manager = DataManager()
 
 
-async def send_promo_notification_to_discord(promo_code: str, promo_data: dict):
-    channel_id = data_manager.get_notification_channel()
-    channel = client.get_channel(channel_id)
+async def send_promo_notification_to_discord(channel, promo_code: str, promo_data: dict):
     Logger.info('Sending promo notification to Discord',
                 {'promo_code': promo_code, 'promo_data': promo_data})
 
@@ -33,7 +32,7 @@ async def send_promo_notification_to_discord(promo_code: str, promo_data: dict):
 
         return embed
 
-    content = f"@here **{promo_data['title']}**\n Promotion Code - [{promo_code}]({promo_data['promotion_url']})"
+    content = f"**{promo_data['title']}**\n Promotion Code - [{promo_code}]({promo_data['promotion_url']})"
 
     all_embeds = [create_product_embed(product) for product in promo_data['products']]
 
@@ -54,6 +53,10 @@ async def send_promo_notification_to_discord(promo_code: str, promo_data: dict):
 
         if i < total_chunks - 1:
             await asyncio.sleep(DISCORD_MESSAGE_DELAY)
+
+    if total_chunks == 0:
+        await channel.send(content=content,
+                           embed=discord.Embed(title="All products already notified!", color=discord.Color.red()))
 
     Logger.info('Finished sending promo notification to Discord')
 
@@ -89,7 +92,7 @@ client = AmazonSearchBot()
 @client.event
 async def on_ready():
     Logger.info(f'Logged in as {client.user} (ID: {client.user.id})')
-    # watched_products_stock_cron.start()
+    amazon_cron.start()
 
 
 @client.tree.command(name='add_amazon_search', description='Add a new Amazon product search term')
@@ -172,7 +175,7 @@ async def get_monthly_sales_cutoff(interaction: discord.Interaction):
 
 
 @tasks.loop(seconds=60 * 60 * 24)
-async def watched_products_stock_cron():
+async def amazon_cron():
     try:
         Logger.info("Starting scheduled Cron")
 
@@ -192,8 +195,13 @@ async def watched_products_stock_cron():
 
             filtered_promo_products[promo_code] = {**value, 'products': filtered_products}
 
+        channel_id = data_manager.get_notification_channel()
+        channel = client.get_channel(channel_id)
+
         for promo_code, value in filtered_promo_products.items():
-            await send_promo_notification_to_discord(promo_code, value)
+            await send_promo_notification_to_discord(channel, promo_code, value)
+
+        await channel.send(content=f'@here Please check the above products with promotions.\n**{get_current_time()}**')
 
         Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 24} seconds.")
     except Exception as e:

@@ -2,65 +2,73 @@ import urllib.parse
 from playwright.async_api import async_playwright
 
 import db
-from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, TOTAL_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE
+from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, TOTAL_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE, \
+    SCRAPER_RETRIES, SCRAPER_RETRIES_DELAY
 from db import get_all_searches
 from logger import Logger
 from utils import sleep_randomly, get_browser
 
 
-async def scrape_search(page, search_term):
-    all_product_links = []
-    for page_num in range(1, TOTAL_PAGES_TO_SCRAPE + 1):
-        try:
-            Logger.info(f"Scraping page {page_num} for '{search_term}'")
-            encoded_search_term = urllib.parse.quote(search_term)
-            await page.goto(f"https://www.amazon.co.uk/s?k={encoded_search_term}&page={page_num}")
-            # Wait for the results to load
-            await page.wait_for_selector('.s-main-slot')
-
-            # Extract product links only for products with promotions
-            product_links = await page.eval_on_selector_all(
-                '.s-result-item:has(.s-coupon-unclipped) a.a-link-normal.s-no-outline',
-                "elements => elements.map(el => el.href)"
-            )
-            all_product_links.extend(product_links)
-            await sleep_randomly(DELAY_BETWEEN_PAGES)
-        except Exception as e:
-            Logger.error(f"Error scraping page {page_num} for '{search_term}'", e)
-    return list(set(all_product_links))
-
-
-async def scrape_all_searches():
+async def scraping_promo_products_from_search(search_term):
     async with async_playwright() as p:
-        all_product_links = []
+        Logger.info(f"Scraping promo products from Search = {search_term}")
         browser = await get_browser(p)
         page = await browser.new_page()
 
-        # Loop through search terms
-        search_items = await get_all_searches()
-        for search_term in search_items:
-            try:
-                Logger.info(f"Searching for: {search_term}")
-                all_product_links.extend(await scrape_search(page, search_term))
-                await sleep_randomly(DELAY_BETWEEN_SEARCHES)
-                Logger.info(f"Completed scraping for: {search_term}")
-            except Exception as e:
-                Logger.error(f"Error scraping search term: {search_term}", e)
+        all_product_links = []
+        try:
+            for page_num in range(1, TOTAL_PAGES_TO_SCRAPE + 1):
+                Logger.info(f"Scraping page {page_num} for '{search_term}'")
+
+                encoded_search_term = urllib.parse.quote(search_term)
+                await page.goto(f"https://www.amazon.co.uk/s?k={encoded_search_term}&page={page_num}")
+
+                # Wait for the results to load
+                await page.wait_for_selector('.s-main-slot')
+
+                # Extract product links only for products with promotions
+                product_links = await page.eval_on_selector_all(
+                    '.s-result-item:has(.s-coupon-unclipped) a.a-link-normal.s-no-outline',
+                    "elements => elements.map(el => el.href)"
+                )
+                all_product_links.extend(product_links)
+                await sleep_randomly(DELAY_BETWEEN_PAGES)
+                Logger.info(f"Scraped page {page_num} for '{search_term}'. Found {len(product_links)} product links")
+        except Exception as e:
+            Logger.error(f"Error scraping search term: {search_term}", e)
 
         await browser.close()
 
-        return list(set(all_product_links))
+        all_product_links = list(set(all_product_links))
+
+        Logger.info(
+            f"Finished scraping promo products from Search = {search_term}. Found {len(all_product_links)} product links")
+        return all_product_links
 
 
-async def scrape_product_from_links(product_links):
+async def scraping_promo_products_from_searches():
+    Logger.info('Started Scraping all promo products from searches')
+    all_product_links = []
+    search_items = await get_all_searches()
+
+    for search_term in search_items:
+        all_product_links.extend(await scraping_promo_products_from_search(search_term))
+        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
+
+    all_product_links = list(set(all_product_links))
+    Logger.info(f'Finished Scraping all promo products from searches. Found {len(all_product_links)} product links')
+    return all_product_links
+
+
+async def scrape_promo_from_promo_products(product_links):
     async with async_playwright() as p:
+        Logger.info("Scraping promo codes from promo product links")
         promo_codes = set()
         browser = await get_browser(p)
         page = await browser.new_page()
         for link in product_links:
             try:
-                await sleep_randomly(DELAY_BETWEEN_LINKS)
-                Logger.info(f"Scraping product", link)
+                Logger.info(f"Finding promo code from product", link)
                 await page.goto(link)
 
                 promo_element = await page.query_selector('.promoPriceBlockMessage > div')
@@ -70,18 +78,23 @@ async def scrape_product_from_links(product_links):
                         promo_code = content_id.split('/promo/')[1]
                         promo_codes.add(promo_code)
                         Logger.info(f"Found promo code: {promo_code}")
+
+                await sleep_randomly(DELAY_BETWEEN_LINKS)
             except Exception as e:
-                Logger.error(f"Error scraping product {link}", e)
+                Logger.error(f"Error Finding promo code from product {link}", e)
 
         await browser.close()
+        Logger.info(f"Finished scraping promo codes from promo product links. Found {len(promo_codes)} promo codes")
         return promo_codes
 
 
 async def setup_amazon_uk():
     async with async_playwright() as p:
         Logger.info("Setting up Amazon UK")
+
         browser = await get_browser(p)
         page = await browser.new_page()
+
         # Navigate to Amazon UK
         await page.goto('https://www.amazon.co.uk')
 
@@ -93,37 +106,32 @@ async def setup_amazon_uk():
         except Exception as e:
             Logger.error(f"Could not find or click cookie accept button", e)
 
-        # Set UK postcode
-        try:
-            await page.click('#glow-ingress-block')
+        await page.click('#glow-ingress-block')
 
-            # Wait for the postcode input field to be visible
-            postcode_input = page.locator('#GLUXZipUpdateInput')
-            await postcode_input.wait_for(state='visible', timeout=5000)
+        # Wait for the postcode input field to be visible
+        postcode_input = page.locator('#GLUXZipUpdateInput')
+        await postcode_input.wait_for(state='visible', timeout=5000)
 
-            # Enter the postcode with a retry mechanism
-            await postcode_input.fill(POST_CODE)
-            await sleep_randomly(3, 0.5)
+        # Enter the postcode with a retry mechanism
+        await postcode_input.fill(POST_CODE)
+        await sleep_randomly(2, 0)
 
-            # Click the "Apply" button
-            await page.click('#GLUXZipUpdate')
+        # Click the "Apply" button
+        await page.click('#GLUXZipUpdate')
 
-            # Wait for the location to update
-            await page.wait_for_selector('#glow-ingress-line2')
+        # Wait for the location to update
+        await page.wait_for_selector('#glow-ingress-line2')
 
-            Logger.info("Postcode set successfully")
-            await sleep_randomly(5, 1)
-        except Exception as e:
-            raise e
-        finally:
-            await browser.close()
+        Logger.info("Postcode set successfully")
+        await sleep_randomly(4, 1)
+        await browser.close()
 
         Logger.info("Amazon UK setup completed")
 
 
-async def scrape_from_promo_code(promo_code: str) -> dict:
+async def scrape_links_from_promo_code(promo_code: str) -> dict:
     async with async_playwright() as p:
-        Logger.info(f"Scraping promo code: {promo_code}")
+        Logger.info(f"Scraping Links from promo code: {promo_code}")
         browser = await get_browser(p)
         page = await browser.new_page()
 
@@ -143,7 +151,6 @@ async def scrape_from_promo_code(promo_code: str) -> dict:
 
         for search in search_list:
             try:
-                await sleep_randomly(DELAY_BETWEEN_SEARCHES)
                 Logger.info(f"Searching for '{search}' with promo code: {promo_code}")
                 # Input search term
                 await page.fill('#keywordSearchInputText', search)
@@ -152,7 +159,7 @@ async def scrape_from_promo_code(promo_code: str) -> dict:
 
                 # Wait for the search results to load
                 await page.wait_for_load_state('networkidle')
-                await sleep_randomly(7, 1)
+                await sleep_randomly(6, 0)
 
                 product_url = await page.evaluate('''
                     () => {
@@ -172,9 +179,11 @@ async def scrape_from_promo_code(promo_code: str) -> dict:
                 Logger.info(f'Fetched all products for search term: {search} and promo code: {promo_code}')
             except Exception as e:
                 Logger.error(f"Error scraping search term: {search}", e)
+            finally:
+                await sleep_randomly(DELAY_BETWEEN_SEARCHES)
 
         await browser.close()
-        Logger.info(f"Scraping Finished for promo code: {promo_code}")
+        Logger.info(f"Finished Scraping links for promo code: {promo_code}. Found {len(all_products)} products")
 
         result = {
             "title": promotion_title,
@@ -185,132 +194,126 @@ async def scrape_from_promo_code(promo_code: str) -> dict:
         return result
 
 
-async def scrape_from_promo_codes(promo_codes) -> dict:
-    Logger.info('Scraping from promo codes')
+async def scrape_links_from_promo_codes(promo_codes) -> dict:
+    Logger.info('Scraping Links from promo codes')
+
     promo_and_product_dict = dict()
     for promo_code in promo_codes:
-        data = await scrape_from_promo_code(promo_code)
-        promo_and_product_dict[promo_code] = data
+        promo_and_product_dict[promo_code] = await scrape_links_from_promo_code(promo_code)
         await sleep_randomly(DELAY_BETWEEN_SEARCHES)
 
-    Logger.info('Finished Scraping from promo codes')
+    Logger.info('Finished scraping Links from all Promo Codes', promo_and_product_dict)
     return promo_and_product_dict
 
 
-async def scrape_promo_products(promo_products_dict: dict) -> dict:
+async def scrape_product_details(product_links: list[str]) -> list[dict]:
     async with async_playwright() as p:
-        Logger.info('Scraping promo products')
-        promo_products_details_map = promo_products_dict.copy()
-
         browser = await get_browser(p)
         page = await browser.new_page()
+        products = []
+        for product_link in product_links:
+            try:
+                Logger.info(f"Scraping product details : {product_link}")
+                await page.goto(product_link)
 
-        for promo_code, value in promo_products_dict.items():
-            products = []
-            for product_link in value['products']:
-                try:
-                    await sleep_randomly(DELAY_BETWEEN_LINKS)
-                    Logger.info(f"Scraping product {product_link}")
-                    await page.goto(product_link)
+                product = await page.evaluate('''
+                    () => {
+                        const product_title = document.querySelector('#productTitle').innerText;
+                        const product_url = window.location.href;
+                        const product_img = document.querySelector('#landingImage').src;
 
-                    product = await page.evaluate('''
-                        () => {
-                            const product_title = document.querySelector('#productTitle').innerText;
-                            const product_url = window.location.href;
-                            const product_img = document.querySelector('#landingImage').src;
-                            
-                            // Get the ASIN (extracted from the product URL)
-                            const asin = product_url ? product_url.match(/\/dp\/(\\w+)/) ? product_url.match(/\/dp\/(\\w+)/)[1] : null : null;
+                        // Get the ASIN (extracted from the product URL)
+                        const asin = product_url ? product_url.match(/\/dp\/(\\w+)/) ? product_url.match(/\/dp\/(\\w+)/)[1] : null : null;
 
-                            // Get the current price
-                            const priceElement = document.querySelector('#corePriceDisplay_desktop_feature_div .reinventPricePriceToPayMargin');
-                            const current_price = priceElement ? priceElement.textContent.trim() : null;
+                        // Get the current price
+                        const priceElement = document.querySelector('#corePriceDisplay_desktop_feature_div .reinventPricePriceToPayMargin');
+                        const current_price = priceElement ? priceElement.textContent.trim() : null;
 
-                            // Get sales in last month
-                            const salesElement = document.querySelector('#social-proofing-faceout-title-tk_bought');
-                            const sales_last_month_raw = salesElement ? salesElement.textContent.trim() : 'N/A';
-                        
-                            // Function to convert sales string to number
-                            const convertSales = (salesStr) => {
-                                const match = salesStr.match(/(\d+)([KM]?)\+/);
-                                if (match) {
-                                    const number = parseInt(match[1]);
-                                    const unit = match[2];
-                                    if (unit === 'K') {
-                                        return number * 1000;
-                                    } else if (unit === 'M') {
-                                        return number * 1000000;
-                                    } else {
-                                        return number;
-                                    }
+                        // Get sales in last month
+                        const salesElement = document.querySelector('#social-proofing-faceout-title-tk_bought');
+                        const sales_last_month_raw = salesElement ? salesElement.textContent.trim() : 'N/A';
+
+                        // Function to convert sales string to number
+                        const convertSales = (salesStr) => {
+                            const match = salesStr.match(/(\d+)([KM]?)\+/);
+                            if (match) {
+                                const number = parseInt(match[1]);
+                                const unit = match[2];
+                                if (unit === 'K') {
+                                    return number * 1000;
+                                } else if (unit === 'M') {
+                                    return number * 1000000;
+                                } else {
+                                    return number;
                                 }
-                                return 0;
-                            };
-                        
-                            // Convert sales_last_month to number
-                            const sales_last_month = convertSales(sales_last_month_raw);
-                        
-                            return {
-                                product_img,
-                                product_title,
-                                product_url,
-                                asin,
-                                current_price,
-                                sales_last_month
-                            };
-                        }
-                    ''')
-                    products.append(product)
-                except Exception as e:
-                    Logger.error(f"Error scraping product {product_link}", e)
+                            }
+                            return 0;
+                        };
 
-            promo_products_details_map[promo_code]['products'] = products
+                        // Convert sales_last_month to number
+                        const sales_last_month = convertSales(sales_last_month_raw);
 
-        await browser.close()
-        Logger.info('Finished scraping promo products')
+                        return {
+                            product_img,
+                            product_title,
+                            product_url,
+                            asin,
+                            current_price,
+                            sales_last_month
+                        };
+                    }
+                ''')
+                products.append(product)
+            except Exception as e:
+                Logger.error(f"Error scraping product {product_link}", e)
 
-        return promo_products_details_map
+            Logger.info(f"Finished scraping product details : {product_link}")
+            await sleep_randomly(DELAY_BETWEEN_LINKS)
+
+    Logger.info(f"Finished scraping product details for {len(products)} products")
+    return products
+
+
+async def scrape_promo_products_details(promo_products_dict: dict) -> dict:
+    Logger.info('Scraping All Promo Product details')
+    promo_products_details_map = promo_products_dict.copy()
+
+    for promo_code, value in promo_products_dict.items():
+        promo_products_details_map[promo_code]['products'] = await scrape_product_details(value['products'])
+        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
+
+    Logger.info('Finished Scraping All Promo Product details')
+    return promo_products_details_map
 
 
 async def startBot():
     await db.connect_to_database()
 
-    retry_count = 3
-    delay = 30
-
-    for attempt in range(retry_count):
+    for attempt in range(SCRAPER_RETRIES):
         try:
+            await setup_amazon_uk()
 
-            # await setup_amazon_uk()
-            #
-            # Logger.info("Starting scraping for all products from searches")
-            # product_links = await scrape_all_searches()
-            # Logger.info(f"Scraping complete. Found {len(product_links)} product links.")
-            #
-            # Logger.info("Starting scraping for promo codes")
-            # promo_codes = await scrape_product_from_links(product_links)
-            # Logger.info(f"Found {len(promo_codes)} promo codes", promo_codes)
+            product_links = await scraping_promo_products_from_searches()
 
-            # Attempt to execute the scraping process
-            promo_products_dict = await scrape_from_promo_codes({'A237B13EQ96M7B'})
-            Logger.info('Products Links Fetched from All Promo Codes', promo_products_dict)
+            promo_codes = await scrape_promo_from_promo_products(product_links)
 
-            promo_products_details_dict = await scrape_promo_products(promo_products_dict)
+            # promo_products_dict = await scrape_from_promo_codes({'A237B13EQ96M7B'})
+            promo_products_dict = await scrape_links_from_promo_codes(promo_codes)
+
+            promo_products_details_dict = await scrape_promo_products_details(promo_products_dict)
             Logger.info('Promo Products Details Fetched', promo_products_details_dict)
 
             # Return the result if successful
             return promo_products_details_dict
 
         except Exception as e:
-            Logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+            Logger.critical(f"Attempt {attempt + 1} failed", e)
 
-            # If this was the last attempt, raise the exception
-            if attempt == retry_count - 1:
-                Logger.error(f"All {retry_count} attempts failed. Aborting.")
+            if attempt == SCRAPER_RETRIES - 1:
+                Logger.critical(f"All {SCRAPER_RETRIES} attempts failed. Aborting.")
                 raise
 
-            # Otherwise, wait for 30 seconds before retrying
-            Logger.info(f"Retrying in {delay} seconds...")
-            await sleep_randomly(delay, 2)
+            Logger.info(f"Retrying in {SCRAPER_RETRIES_DELAY} seconds...")
+            await sleep_randomly(SCRAPER_RETRIES_DELAY, 2)
 
     return None

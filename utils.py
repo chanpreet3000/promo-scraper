@@ -1,11 +1,19 @@
 import asyncio
 import os
 import random
+from datetime import datetime
+
 from config import USER_AGENTS
+import pytz
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def get_current_time():
+    uk_tz = pytz.timezone('Europe/London')
+    return datetime.now(uk_tz).strftime('%d %B %Y, %I:%M:%S %p %Z')
 
 
 async def sleep_randomly(base_sleep: float, randomness: float = 1):
