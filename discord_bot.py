@@ -7,20 +7,25 @@ from discord.ext import tasks
 
 from config import DISCORD_MESSAGE_DELAY
 from data_manager import DataManager
-from db import add_search, remove_search, get_all_searches, get_recent_products, upsert_product
+from db import add_search, remove_search, get_all_searches
 
 from logger import Logger
-from scraper import startBot
+from scraper import startScraper
 from utils import get_current_time
 
 data_manager = DataManager()
 
 
-async def send_promo_notification_to_discord(channel, promo_code: str, promo_data: dict):
-    Logger.info('Sending promo notification to Discord',
-                {'promo_code': promo_code, 'promo_data': promo_data})
+async def send_promo_notification_to_discord(channel, products: list[dict], total_len: int):
+    Logger.info(f'Sending promo notification to Discord. Channel: {channel.id}, Products: {len(products)}')
+
+    content = f"@here Found {total_len} products with Promotions.\nOnly {len(products)} new product with promotions found!.\n**{get_current_time()}**"
+
+    await channel.send(content=content)
 
     def create_product_embed(product):
+        promotion_url = f'https://www.amazon.co.uk/promotion/psp/{product["promo_code"]}'
+
         embed = discord.Embed(
             title=product['product_title'],
             url=product['product_url'],
@@ -30,14 +35,12 @@ async def send_promo_notification_to_discord(channel, promo_code: str, promo_dat
         embed.add_field(name="Current Price", value=product['current_price'] or 'N/A', inline=True)
         embed.add_field(name="Sales This Month", value=f"{product['sales_last_month']}+ this month" or 'N/A',
                         inline=True)
-        embed.add_field(name="Promo", value=f"[{promo_data['title']}]({promo_data['promotion_url']})",
+        embed.add_field(name="Promo", value=f"[{product['promo_text']}]({promotion_url})",
                         inline=True)
 
         return embed
 
-    content = f"**{promo_data['title']}**\n Promotion Code - [{promo_code}]({promo_data['promotion_url']})"
-
-    all_embeds = [create_product_embed(product) for product in promo_data['products']]
+    all_embeds = [create_product_embed(product) for product in products]
 
     chunk_size = 10
     total_chunks = ceil(len(all_embeds) / chunk_size)
@@ -46,20 +49,13 @@ async def send_promo_notification_to_discord(channel, promo_code: str, promo_dat
         embed_chunk = all_embeds[i * chunk_size: (i + 1) * chunk_size]
 
         try:
-            if i == 0:
-                await channel.send(content=content, embeds=embed_chunk)
-            else:
-                await channel.send(embeds=embed_chunk)
+            await channel.send(embeds=embed_chunk)
             Logger.info(f"Promo notification sent successfully (Chunk {i + 1} of {total_chunks})")
         except Exception as error:
             Logger.error(f"Error sending promo notification (Chunk {i + 1} of {total_chunks})", error)
 
         if i < total_chunks - 1:
             await asyncio.sleep(DISCORD_MESSAGE_DELAY)
-
-    if total_chunks == 0:
-        await channel.send(content=content,
-                           embed=discord.Embed(title="All products already notified!", color=discord.Color.red()))
 
     Logger.info('Finished sending promo notification to Discord')
 
@@ -177,35 +173,18 @@ async def get_monthly_sales_cutoff(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-@tasks.loop(seconds=60 * 60 * 2)
+@tasks.loop(seconds=60 * 60 * 6)
 async def amazon_cron():
     try:
         Logger.info("Starting scheduled Cron")
 
-        promo_products_details_dict = await startBot()
-        recent_products = await get_recent_products(days=7)
-
-        filtered_promo_products = {}
-
-        # Filter the products
-        for promo_code, value in promo_products_details_dict.items():
-            filtered_products = []
-            for product in value['products']:
-                if product['asin'] not in recent_products and product[
-                    'sales_last_month'] >= data_manager.get_monthly_sales_cutoff():
-                    await upsert_product(product['asin'], promo_code)
-                    filtered_products.append(product)
-
-            filtered_promo_products[promo_code] = {**value, 'products': filtered_products}
+        products_to_notify, total_len = await startScraper()
 
         channel_id = data_manager.get_notification_channel()
         channel = client.get_channel(channel_id)
 
-        for promo_code, value in filtered_promo_products.items():
-            await send_promo_notification_to_discord(channel, promo_code, value)
+        await send_promo_notification_to_discord(channel, products_to_notify, total_len)
 
-        await channel.send(content=f'@here Please check the above products with promotions.\n**{get_current_time()}**')
-
-        Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 2} seconds.")
+        Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 6} seconds.")
     except Exception as e:
         Logger.critical("An error occurred in scheduled cron", e)

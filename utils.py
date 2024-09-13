@@ -5,6 +5,8 @@ import random
 from datetime import datetime
 from dotenv import load_dotenv
 
+from logger import Logger
+
 load_dotenv()
 
 
@@ -16,6 +18,7 @@ def get_current_time():
 async def sleep_randomly(base_sleep: float, randomness: float = 1):
     delay = base_sleep + random.uniform(-randomness, randomness)
     delay = max(delay, 0)
+    Logger.debug(f'Sleeping for {delay:.2f} seconds')
     await asyncio.sleep(delay)
 
 
@@ -63,16 +66,9 @@ async def get_browser(p):
         locale='en-GB',
         timezone_id='Europe/London',
     )
-
-    # Randomize browser fingerprint
-    page = await browser.new_page()
-    await page.evaluate('''
-        () => {
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'languages', {get: () => ['en-GB', 'en']});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-        }
-    ''')
-    await page.close()
-
-    return browser
+    pages = browser.pages
+    if pages:
+        page = pages[0]
+    else:
+        page = await browser.new_page()
+    return browser, page

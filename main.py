@@ -15,7 +15,7 @@ async def main():
     async with client:
         await db.connect_to_database()
 
-        Logger.info('Starting the bot')
+        Logger.info('Starting the Discord Bot')
         await client.start(DISCORD_TOKEN)
 
 

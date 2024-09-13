@@ -76,7 +76,7 @@ class Logger:
             colored_message = f"{Fore.MAGENTA}{message}"
 
         # Color the file path white
-        colored_file_path = f"{Fore.WHITE}{file_path_info:<50}"
+        colored_file_path = f"{Fore.WHITE}{file_path_info:<40}"
 
         # Prepare the log message
         log_message = f"{colored_timestamp} {colored_log_level} {colored_file_path} : {colored_message}"

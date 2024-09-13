@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
+from data_manager import DataManager
 from logger import Logger
 
 load_dotenv()
@@ -11,6 +12,7 @@ client = None
 db = None
 collection = None
 products_collection = None
+data_manager = DataManager()
 
 
 async def connect_to_database():
@@ -51,20 +53,59 @@ async def get_all_searches():
     return searches
 
 
-async def upsert_product(asin, promo_code):
+async def upsert_product(product_data):
     current_time = datetime.utcnow()
+    product_id = f"{product_data['asin']}/{product_data['promo_code']}"
+
+    update_data = {
+        "last_updated": current_time,
+        "product_img": product_data['product_img'],
+        "product_title": product_data['product_title'],
+        "product_url": product_data['product_url'],
+        "asin": product_data['asin'],
+        "current_price": product_data['current_price'],
+        "sales_last_month": product_data['sales_last_month'],
+        "promo_code": product_data['promo_code'],
+        "promo_text": product_data['promo_text']
+    }
+
     result = await products_collection.update_one(
-        {"asin": asin},
-        {"$set": {"last_updated": current_time, "promo_code": promo_code}},
+        {"_id": product_id},
+        {"$set": update_data},
         upsert=True
     )
-    Logger.info(f"Upserted product: {asin}")
+
+    Logger.info(f"Upserted product: {product_id}")
     return result.upserted_id is not None
 
 
-async def get_recent_products(days=7):
+async def process_products(product_list, days=7):
     cutoff_date = datetime.utcnow() - timedelta(days=days)
-    cursor = products_collection.find({"last_updated": {"$gte": cutoff_date}})
-    recent_products = [doc['asin'] async for doc in cursor]
-    Logger.info(f"Found {len(recent_products)} recent products")
-    return recent_products
+    cutoff_sales = data_manager.get_monthly_sales_cutoff()
+
+    processed_products = {
+        "upserted": [],
+        "up_to_date": []
+    }
+
+    for product in product_list:
+        product_id = f"{product['asin']}/{product['promo_code']}"
+        doc = await products_collection.find_one(
+            {
+                "_id": product_id,
+                "last_updated": {"$gte": cutoff_date}
+            }
+        )
+
+        if doc is None and product['sales_last_month'] >= cutoff_sales:
+            upserted = await upsert_product(product)
+            if upserted:
+                processed_products["upserted"].append(product)
+            else:
+                Logger.warn(f"Failed to upsert product: {product_id}")
+        else:
+            processed_products["up_to_date"].append(product)
+
+    Logger.info(f"Upserted {len(processed_products['upserted'])} products")
+    Logger.info(f"Found {len(processed_products['up_to_date'])} up-to-date products")
+    return processed_products["upserted"]
