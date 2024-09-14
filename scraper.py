@@ -1,3 +1,4 @@
+import json
 import urllib.parse
 import re
 from playwright.async_api import async_playwright
@@ -246,7 +247,10 @@ async def startScraper() -> tuple[list[dict], int]:
             await sleep_randomly(DELAY_BETWEEN_STEPS)
 
             product_details = await scrape_promo_product_details_in_batch(product_links)
-            product_details = list(set(product_details))
+
+            product_details = list({json.dumps(detail, sort_keys=True) for detail in product_details})
+            product_details = [json.loads(detail) for detail in product_details]
+
             await sleep_randomly(DELAY_BETWEEN_STEPS)
 
             filtered_products = await process_products(product_details)

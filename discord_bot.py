@@ -19,7 +19,11 @@ data_manager = DataManager()
 async def send_promo_notification_to_discord(channel, products: list[dict], total_len: int):
     Logger.info(f'Sending promo notification to Discord. Channel: {channel.id}, Products: {len(products)}')
 
-    content = f"@here Found {total_len} products with Promotions.\nOnly {len(products)} new product with promotions found!.\n**{get_current_time()}**"
+    content = (
+        f"@here 🎉 **{total_len}** products with promotions were found!\n"
+        f"✨ Out of these, **{len(products)}** are new and eligible for promotions.\n"
+        f"📅 Timestamp: **{get_current_time()}**"
+    )
 
     await channel.send(content=content)
 
