@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
-from config import DISCORD_MESSAGE_DELAY
+from config import DISCORD_MESSAGE_DELAY, CRON_JOB_INTERVAL
 from data_manager import DataManager
 from db import add_search, remove_search, get_all_searches
 
@@ -134,17 +134,46 @@ async def list_amazon_searches(interaction: discord.Interaction):
     Logger.info('Listing search terms Command completed')
 
 
-@client.tree.command(name="ap_set_channel", description="Set the channel for stock notifications")
+@client.tree.command(name="ap_add_notification_channel", description="Add a channel for stock notifications")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_channel(interaction: discord.Interaction):
-    Logger.info(f"Setting notification channel: {interaction.channel.id}")
-    data_manager.set_notification_channel(interaction.channel.id)
+async def add_notification_channel(interaction: discord.Interaction):
+    Logger.info(f"Adding notification channel: {interaction.channel.id}")
+    data_manager.add_notification_channel(interaction.channel.id)
 
     embed = discord.Embed(
-        title="✅ Notification Channel Set",
+        title="✅ Notification Channel Added",
         description=f"This channel will now receive promotions notifications.",
         color=discord.Color.green()
     )
+    await interaction.response.send_message(embed=embed)
+
+
+@client.tree.command(name="ap_remove_notification_channel", description="Remove a channel from stock notifications")
+@app_commands.checks.has_permissions(administrator=True)
+async def remove_notification_channel(interaction: discord.Interaction):
+    Logger.info(f"Removing notification channel: {interaction.channel.id}")
+    data_manager.remove_notification_channel(interaction.channel.id)
+
+    embed = discord.Embed(
+        title="✅ Notification Channel Removed",
+        description=f"This channel will no longer receive promotions notifications.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+@client.tree.command(name="ap_list_notification_channels", description="List all channels set for stock notifications")
+@app_commands.checks.has_permissions(administrator=True)
+async def list_notification_channels(interaction: discord.Interaction):
+    channels = data_manager.get_notification_channels()
+    channel_list = "\n".join([f"<#{channel_id}>" for channel_id in channels]) if channels else "No channels set."
+
+    embed = discord.Embed(
+        title="📢 Notification Channels",
+        description=channel_list,
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Total channels: {len(channels)}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -177,18 +206,22 @@ async def get_monthly_sales_cutoff(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
-@tasks.loop(seconds=60 * 60 * 6)
+@tasks.loop(seconds=CRON_JOB_INTERVAL)
 async def amazon_cron():
     try:
         Logger.info("Starting scheduled Cron")
 
         products_to_notify, total_len = await startScraper()
 
-        channel_id = data_manager.get_notification_channel()
-        channel = client.get_channel(channel_id)
+        channel_ids = data_manager.get_notification_channels()
 
-        await send_promo_notification_to_discord(channel, products_to_notify, total_len)
+        for channel_id in channel_ids:
+            channel = client.get_channel(channel_id)
+            if channel:
+                await send_promo_notification_to_discord(channel, products_to_notify, total_len)
+            else:
+                Logger.warn(f"Channel with ID {channel_id} not found")
 
-        Logger.info(f"Scheduled cron completed. Next run in {60 * 60 * 6} seconds.")
+        Logger.info(f"Scheduled cron completed. Next run in {CRON_JOB_INTERVAL} seconds.")
     except Exception as e:
         Logger.critical("An error occurred in scheduled cron", e)
