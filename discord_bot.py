@@ -10,36 +10,38 @@ from data_manager import DataManager
 from db import add_search, remove_search, get_all_searches
 
 from logger import Logger
+from models import ProductDetails
 from scraper import startScraper
 from utils import get_current_time
 
 data_manager = DataManager()
 
 
-async def send_promo_notification_to_discord(channel, products: list[dict], total_len: int):
+async def send_promo_notification_to_discord(channel, products: list[ProductDetails], total_len: int):
     Logger.info(f'Sending promo notification to Discord. Channel: {channel.id}, Products: {len(products)}')
 
     content = (
-        f"@here 🎉 **{total_len}** products with promotions were found!\n"
-        f"✨ Out of these, **{len(products)}** are new and eligible for promotions.\n"
-        f"📅 Timestamp: **{get_current_time()}**"
+        f"@here\n\n"
+        f"🎉 **{total_len}** products with promotions were found!\n\n"
+        f"✨ Out of these, **{len(products)}** are new and eligible for promotions.\n\n"
+        f"📅 **{get_current_time()}**"
     )
 
     await channel.send(content=content)
 
-    def create_product_embed(product):
-        promotion_url = f'https://www.amazon.co.uk/promotion/psp/{product["promo_code"]}'
+    def create_product_embed(product: ProductDetails):
+        promotion_url = f'https://www.amazon.co.uk/promotion/psp/{product.promotion_code}'
 
         embed = discord.Embed(
-            title=product['product_title'],
-            url=product['product_url'],
+            title=product.product_title,
+            url=product.product_url,
             color=discord.Color.green()
-        ).set_thumbnail(url=product['product_img'])
+        ).set_thumbnail(url=product.product_image_url)
 
-        embed.add_field(name="Current Price", value=product['current_price'] or 'N/A', inline=True)
-        embed.add_field(name="Sales This Month", value=f"{product['sales_last_month']}+ this month" or 'N/A',
+        embed.add_field(name="Price", value=product.product_price or 'N/A', inline=True)
+        embed.add_field(name="Sales This Month", value=f"{product.product_sales}+ this month" or 'N/A',
                         inline=True)
-        embed.add_field(name="Promo", value=f"[{product['promo_text']}]({promotion_url})",
+        embed.add_field(name="Promotion", value=f"[{product.promotion_title}]({promotion_url})",
                         inline=True)
 
         return embed

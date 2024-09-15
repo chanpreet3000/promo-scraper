@@ -3,8 +3,10 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
+from config import DAYS_TO_EXPIRE_OLD_PRODUCTS
 from data_manager import DataManager
 from logger import Logger
+from models import ProductDetails
 
 load_dotenv()
 
@@ -53,20 +55,20 @@ async def get_all_searches():
     return searches
 
 
-async def upsert_product(product_data):
+async def upsert_product(product_details: ProductDetails):
     current_time = datetime.utcnow()
-    product_id = f"{product_data['asin']}/{product_data['promo_code']}"
+    product_id = product_details.id
 
     update_data = {
         "last_updated": current_time,
-        "product_img": product_data['product_img'],
-        "product_title": product_data['product_title'],
-        "product_url": product_data['product_url'],
-        "asin": product_data['asin'],
-        "current_price": product_data['current_price'],
-        "sales_last_month": product_data['sales_last_month'],
-        "promo_code": product_data['promo_code'],
-        "promo_text": product_data['promo_text']
+        "product_image_url": product_details.product_image_url,
+        "product_title": product_details.product_title,
+        "product_url": product_details.product_url,
+        "product_asin": product_details.product_asin,
+        "product_price": product_details.product_price,
+        "product_sales": product_details.product_sales,
+        "promotion_code": product_details.promotion_code,
+        "promotion_title": product_details.promotion_title
     }
 
     result = await products_collection.update_one(
@@ -79,17 +81,18 @@ async def upsert_product(product_data):
     return result.upserted_id is not None
 
 
-async def process_products(product_list, days=7):
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+async def process_products(product_list: list[ProductDetails]):
+    cutoff_date = datetime.utcnow() - timedelta(days=DAYS_TO_EXPIRE_OLD_PRODUCTS)
     cutoff_sales = data_manager.get_monthly_sales_cutoff()
 
     processed_products = {
         "upserted": [],
-        "up_to_date": []
+        "up_to_date": [],
+        "below_threshold": []
     }
 
     for product in product_list:
-        product_id = f"{product['asin']}/{product['promo_code']}"
+        product_id = product.id
         doc = await products_collection.find_one(
             {
                 "_id": product_id,
@@ -97,15 +100,20 @@ async def process_products(product_list, days=7):
             }
         )
 
-        if doc is None and product['sales_last_month'] >= cutoff_sales:
-            upserted = await upsert_product(product)
-            if upserted:
-                processed_products["upserted"].append(product)
+        if doc is None:
+            if product.product_sales >= cutoff_sales:
+                upserted = await upsert_product(product)
+                if upserted:
+                    processed_products["upserted"].append(product)
+                else:
+                    Logger.warn(f"Failed to upsert product: {product_id}")
             else:
-                Logger.warn(f"Failed to upsert product: {product_id}")
+                processed_products["below_threshold"].append(product)
+                Logger.warn(f"Product sales below threshold: {product_id}")
         else:
             processed_products["up_to_date"].append(product)
 
     Logger.info(f"Upserted {len(processed_products['upserted'])} products")
     Logger.info(f"Found {len(processed_products['up_to_date'])} up-to-date products")
+    Logger.info(f"Found {len(processed_products['below_threshold'])} below threshold products")
     return processed_products["upserted"]
