@@ -186,6 +186,12 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[ProductDetails]:
             Logger.warn(f"Could not find or process page title:", e)
             promotion_title = "Unknown Promotion"
 
+        if check_promo_regex(promotion_title):
+            Logger.info(f"Promotion title: {promotion_title} matches the regex")
+        else:
+            Logger.warn(f"Promotion title: {promotion_title} does not match the regex. Skipping...")
+            return []
+
         all_promotion_products: list[ProductDetails] = []
         search_list = await get_all_searches()
 
