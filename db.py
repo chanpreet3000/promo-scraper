@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from config import DAYS_TO_EXPIRE_OLD_PRODUCTS
 from data_manager import DataManager
 from logger import Logger
-from models import ProductDetails
+from models import ProductDetails, ProcessedProductDetails
 
 load_dotenv()
 
@@ -81,15 +81,10 @@ async def upsert_product(product_details: ProductDetails):
     return result.upserted_id is not None
 
 
-async def process_products(product_list: list[ProductDetails]):
+async def process_products(product_list: list[ProductDetails]) -> ProcessedProductDetails:
     cutoff_date = datetime.utcnow() - timedelta(days=DAYS_TO_EXPIRE_OLD_PRODUCTS)
     cutoff_sales = data_manager.get_monthly_sales_cutoff()
-
-    processed_products = {
-        "upserted": [],
-        "up_to_date": [],
-        "below_threshold": []
-    }
+    processed_product_details = ProcessedProductDetails()
 
     for product in product_list:
         product_id = product.id
@@ -104,16 +99,17 @@ async def process_products(product_list: list[ProductDetails]):
             if product.product_sales >= cutoff_sales:
                 upserted = await upsert_product(product)
                 if upserted:
-                    processed_products["upserted"].append(product)
+                    processed_product_details.upserted.append(product)
                 else:
                     Logger.warn(f"Failed to upsert product: {product_id}")
             else:
-                processed_products["below_threshold"].append(product)
+                processed_product_details.below_threshold.append(product)
                 Logger.warn(f"Product sales below threshold: {product_id}")
         else:
-            processed_products["up_to_date"].append(product)
+            processed_product_details.up_to_date.append(product)
 
-    Logger.info(f"Upserted {len(processed_products['upserted'])} products")
-    Logger.info(f"Found {len(processed_products['up_to_date'])} up-to-date products")
-    Logger.info(f"Found {len(processed_products['below_threshold'])} below threshold products")
-    return processed_products["upserted"]
+    Logger.info(f"Processed {len(product_list)} products")
+    Logger.info(f"Upserted {len(processed_product_details.upserted)} products")
+    Logger.info(f"Found {len(processed_product_details.up_to_date)} up-to-date products")
+    Logger.info(f"Found {len(processed_product_details.below_threshold)} below threshold products")
+    return processed_product_details

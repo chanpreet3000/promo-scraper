@@ -10,21 +10,28 @@ from data_manager import DataManager
 from db import add_search, remove_search, get_all_searches
 
 from logger import Logger
-from models import ProductDetails
+from models import ProductDetails, ProcessedProductDetails
 from scraper import startScraper
 from utils import get_current_time
 
 data_manager = DataManager()
 
 
-async def send_promo_notification_to_discord(channel, products: list[ProductDetails], total_len: int):
-    Logger.info(f'Sending promo notification to Discord. Channel: {channel.id}, Products: {len(products)}')
+async def send_promo_notification_to_discord(channel, processed_data: ProcessedProductDetails):
+    products = processed_data.upserted
+    total_products = len(processed_data.upserted) + len(processed_data.up_to_date) + len(processed_data.below_threshold)
+
+    Logger.info(f'Sending promo notification to Discord. Channel: {channel.id}, Total Products: {total_products}')
 
     content = (
         f"@here\n\n"
-        f"🎉 **{total_len}** products with promotions were found!\n\n"
-        f"✨ Out of these, **{len(products)}** are new and eligible for promotions.\n\n"
-        f"📅 **{get_current_time()}**"
+        f"We've just completed a scan for product promotions. Here's what we found:\n\n"
+        f"**Summary:**\n"
+        f"- Total products scanned: **{total_products}**\n"
+        f"- New eligible products: **{len(processed_data.upserted)}**\n"
+        f"- Up-to-date products: **{len(processed_data.up_to_date)}**\n"
+        f"- Products below threshold: **{len(processed_data.below_threshold)}**\n\n"
+        f"Scan completed at: **{get_current_time()}**\n\n"
     )
 
     await channel.send(content=content)
@@ -213,14 +220,14 @@ async def amazon_cron():
     try:
         Logger.info("Starting scheduled Cron")
 
-        products_to_notify, total_len = await startScraper()
+        processed_data = await startScraper()
 
         channel_ids = data_manager.get_notification_channels()
 
         for channel_id in channel_ids:
             channel = client.get_channel(channel_id)
             if channel:
-                await send_promo_notification_to_discord(channel, products_to_notify, total_len)
+                await send_promo_notification_to_discord(channel, processed_data)
             else:
                 Logger.warn(f"Channel with ID {channel_id} not found")
 

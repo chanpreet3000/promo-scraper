@@ -58,3 +58,10 @@ class ProductDetails:
 
     def __repr__(self):
         return self.__str__()
+
+
+class ProcessedProductDetails:
+    def __init__(self):
+        self.upserted = []
+        self.up_to_date = []
+        self.below_threshold = []
