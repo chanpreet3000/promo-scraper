@@ -4,7 +4,7 @@ from playwright.async_api import async_playwright
 
 from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, MAX_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE, \
     SCRAPER_RETRIES, SCRAPER_RETRIES_DELAY, SCRAPING_URL_BATCH_SIZE, BATCH_SIZE_DELAY, DELAY_BETWEEN_STEPS, \
-    MAX_SHOW_MORE_CLICKS
+    MAX_SHOW_MORE_CLICKS, LIMITING_RESULTS
 from db import get_all_searches, connect_to_database, process_products
 from logger import Logger
 from models import ProductDetails, Promotion, ProcessedProductDetails
@@ -88,6 +88,7 @@ async def scraping_promo_products_from_search(search_term: str) -> list[str]:
             Logger.error(f"Error scraping search term: {search_term}", e)
 
         all_product_links = list(set(all_product_links))
+        all_product_links = all_product_links[:LIMITING_RESULTS]
 
         Logger.info(
             f"Finished scraping promo products from Search = {search_term}. Found {len(all_product_links)} product links")
