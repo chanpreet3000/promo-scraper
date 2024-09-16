@@ -268,7 +268,9 @@ async def scrape_links_from_promo_codes(promo_codes: set[str]) -> list[Promotion
                     Logger.info(f"Retrying promo code {promo_code}...")
                     await sleep_randomly(DELAY_BETWEEN_LINKS)
 
-    Logger.info('finished scraping product links from all promo codes', promotions_list)
+    Logger.info(
+        f'finished scraping product links from all promo codes. found {len(promotions_list)} items with promotions',
+        promotions_list)
     return promotions_list
 
 
