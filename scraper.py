@@ -68,7 +68,7 @@ async def scraping_promo_products_from_search(search_term: str) -> list[str]:
 
                 # Extract product links only for products with promotions
                 product_links = await page.eval_on_selector_all(
-                    '.s-result-item:has(.s-coupon-unclipped) a.a-link-normal.s-no-outline',
+                    'div.s-result-item div.a-section a.a-link-normal.s-no-outline',
                     "elements => elements.map(el => el.href)"
                 )
                 all_product_links.extend(product_links)
@@ -191,6 +191,7 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
             Logger.info(f"Promotion title: {promotion_title} matches the regex")
         else:
             Logger.warn(f"Promotion title: {promotion_title} does not match the regex. Skipping...")
+            await sleep_randomly(DELAY_BETWEEN_PAGES)
             return all_promotion_products
 
         await sleep_randomly(5, 0.5)
@@ -243,6 +244,7 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
         Logger.info(
             f"Finished Scraping product urls for promo code: {promo_code}. Found {len(all_promotion_products)} products")
 
+        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
         return all_promotion_products
 
 
@@ -264,8 +266,6 @@ async def scrape_links_from_promo_codes(promo_codes: set[str]) -> list[Promotion
                 else:
                     Logger.info(f"Retrying promo code {promo_code}...")
                     await sleep_randomly(DELAY_BETWEEN_LINKS)
-
-        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
 
     Logger.info('finished scraping product links from all promo codes', promotions_list)
     return promotions_list
