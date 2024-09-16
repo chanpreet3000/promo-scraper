@@ -18,8 +18,20 @@ uses web scraping techniques to find products with active promotions and filters
 1. Clone the repository
 2. Install required dependencies: `pip install -r requirements.txt`
 3. Set up your Discord bot and get the token
-4. Configure the bot token in `.env` and other settings in `config.py`
+4. Configure the bot token & mongo uri in `.env` and other settings in `config.py`
 5. Run the bot: `python main.py`
+
+## Running on EC2
+
+To run the bot on an EC2 instance:
+
+1. SSH into your EC2 instance
+2. Navigate to the project directory: `cd promo-scraper`
+3. Activate the virtual environment: `source .venv/bin/activate`
+4. Install Xvfb if not already installed: `sudo apt-get install xvfb`
+5. Run the bot using Xvfb: `xvfb-run -a python3 main.py`
+
+Note: Using `xvfb-run` allows the bot to run in a virtual framebuffer, which is necessary for headless environments like EC2 instances.
 
 ## Commands
 
