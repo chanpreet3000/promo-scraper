@@ -1,11 +1,12 @@
 import asyncio
-from math import ceil
-
+import datetime
 import discord
+
+from math import ceil
 from discord import app_commands
 from discord.ext import tasks
 
-from config import DISCORD_MESSAGE_DELAY, CRON_JOB_INTERVAL
+from config import DISCORD_MESSAGE_DELAY
 from data_manager import DataManager
 from db import add_search, remove_search, get_all_searches
 
@@ -96,6 +97,35 @@ class AmazonSearchBot(discord.Client):
     async def setup_hook(self):
         await self.tree.sync()
         self.tree.on_error = on_command_error
+        self.amazon_cron.start()
+
+    async def close(self):
+        self.amazon_cron.cancel()
+        await super().close()
+
+    @tasks.loop(time=datetime.time(hour=11, minute=0, tzinfo=datetime.timezone.utc))
+    async def amazon_cron(self):
+        try:
+            Logger.info("Starting daily Amazon promotion check")
+
+            processed_data = await startScraper()
+
+            channel_ids = data_manager.get_notification_channels()
+
+            for channel_id in channel_ids:
+                channel = self.get_channel(channel_id)
+                if channel:
+                    await send_promo_notification_to_discord(channel, processed_data)
+                else:
+                    Logger.warn(f"Channel with ID {channel_id} not found")
+
+            Logger.info("Daily Amazon promotion check completed.")
+        except Exception as e:
+            Logger.critical("An error occurred in daily Amazon promotion check", e)
+
+    @amazon_cron.before_loop
+    async def before_amazon_cron(self):
+        await self.wait_until_ready()
 
 
 client = AmazonSearchBot()
@@ -104,7 +134,6 @@ client = AmazonSearchBot()
 @client.event
 async def on_ready():
     Logger.info(f'Logged in as {client.user} (ID: {client.user.id})')
-    amazon_cron.start()
 
 
 @client.tree.command(name='ap_add_amazon_search', description='Add a new Amazon product search term')
@@ -213,24 +242,3 @@ async def get_monthly_sales_cutoff(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
     await interaction.response.send_message(embed=embed)
-
-
-@tasks.loop(seconds=CRON_JOB_INTERVAL)
-async def amazon_cron():
-    try:
-        Logger.info("Starting scheduled Cron")
-
-        processed_data = await startScraper()
-
-        channel_ids = data_manager.get_notification_channels()
-
-        for channel_id in channel_ids:
-            channel = client.get_channel(channel_id)
-            if channel:
-                await send_promo_notification_to_discord(channel, processed_data)
-            else:
-                Logger.warn(f"Channel with ID {channel_id} not found")
-
-        Logger.info(f"Scheduled cron completed. Next run in {CRON_JOB_INTERVAL} seconds.")
-    except Exception as e:
-        Logger.critical("An error occurred in scheduled cron", e)

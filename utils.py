@@ -43,10 +43,6 @@ async def get_browser(p):
     latitude = 51.2150 + random.uniform(-0.1, 0.1)
     longitude = -0.7986 + random.uniform(-0.1, 0.1)
 
-    # Generate random hardware concurrency and device memory
-    hardware_concurrency = random.randint(4, 16)
-    device_memory = random.choice([4, 8, 16])
-
     browser = await p.chromium.launch_persistent_context(
         user_data_dir=user_data_dir,
         headless=False,
@@ -62,13 +58,6 @@ async def get_browser(p):
             '--disable-extensions',
             '--disable-popup-blocking',
             '--disable-infobars',
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-blink-features=AutomationControlled',
-            f'--device-memory={device_memory}',
-            f'--js-flags=--max-old-space-size={random.randint(2048, 4096)}',
         ],
         ignore_https_errors=True,
         accept_downloads=True,
@@ -76,28 +65,10 @@ async def get_browser(p):
         geolocation={'latitude': latitude, 'longitude': longitude},
         locale='en-GB',
         timezone_id='Europe/London',
-        device_scale_factor=1,
-        is_mobile=False,
-        has_touch=False,
     )
-
     pages = browser.pages
     if pages:
         page = pages[0]
     else:
         page = await browser.new_page()
-
-    # Set additional browser properties
-    await page.evaluate(f"""
-            Object.defineProperty(navigator, 'hardwareConcurrency', {{
-                get: () => {hardware_concurrency}
-            }});
-            Object.defineProperty(navigator, 'deviceMemory', {{
-                get: () => {device_memory}
-            }});
-            Object.defineProperty(navigator, 'platform', {{
-                get: () => 'Win32'
-            }});
-        """)
-
     return browser, page
