@@ -1,10 +1,11 @@
+import time
 import urllib.parse
 import re
 from playwright.async_api import async_playwright
 
 from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, MAX_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE, \
     SCRAPER_RETRIES, SCRAPER_RETRIES_DELAY, SCRAPING_URL_BATCH_SIZE, BATCH_SIZE_DELAY, DELAY_BETWEEN_STEPS, \
-    MAX_SHOW_MORE_CLICKS, LIMITING_RESULTS
+    MAX_SHOW_MORE_CLICKS, LIMITING_RESULTS, CAPTCHA_DETECTED_DELAY
 from db import get_all_searches, connect_to_database, process_products
 from logger import Logger
 from models import ProductDetails, Promotion, ProcessedProductDetails
@@ -25,8 +26,8 @@ async def setup_amazon_uk():
             accept_cookies_button = page.locator('#sp-cc-accept')
             await accept_cookies_button.click(timeout=5000)
             Logger.info("Cookies accepted")
-        except Exception as e:
-            Logger.error(f"Could not find or click cookie accept button", e)
+        except:
+            Logger.warn(f"Could not find or click cookie accept button")
 
         await page.click('#glow-ingress-block')
 
@@ -253,21 +254,26 @@ async def scrape_links_from_promo_codes(promo_codes: set[str]) -> list[Promotion
     Logger.info('scraping product links from all promo codes')
 
     promotions_list: list[Promotion] = []
-    for promo_code in promo_codes:
+    for coupon_index, promo_code in enumerate(promo_codes):
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
+                Logger.info(
+                    f"Attempting coupon {coupon_index + 1}/{len(promo_codes)}, attempt {attempt + 1}/{max_attempts}")
                 promo_results = await scrape_links_from_promo_code(promo_code)
                 promotions_list.extend(promo_results)
                 break
             except Exception as e:
-                Logger.error(f"Error scraping promo code {promo_code} on attempt {attempt + 1}: {str(e)}")
+                Logger.error(
+                    f"Error scraping promo code {promo_code} (coupon {coupon_index + 1}/{len(promo_codes)}) on attempt {attempt + 1}",
+                    e)
                 if attempt == max_attempts - 1:
-                    Logger.error(f"Max attempts reached for promo code {promo_code}. Moving to next promo code.")
+                    Logger.error(
+                        f"Max attempts reached for promo code {promo_code} (coupon {coupon_index + 1}/{len(promo_codes)}). Moving to next promo code.")
                 else:
-                    Logger.info(f"Retrying promo code {promo_code}...")
-                    await sleep_randomly(DELAY_BETWEEN_LINKS)
-
+                    Logger.info(
+                        f"Retrying coupon {coupon_index + 1}/{len(promo_codes)}, attempt {attempt + 2}/{max_attempts} for promo code {promo_code}...")
+                    await sleep_randomly(2 * DELAY_BETWEEN_LINKS, 5)
     Logger.info(
         f'finished scraping product links from all promo codes. found {len(promotions_list)} items with promotions',
         promotions_list)
@@ -340,7 +346,7 @@ async def scrape_product_details_from_url(page, promotion_link: Promotion) -> Pr
             product_asin=product['asin'],
         )
     except Exception as e:
-        Logger.error(f"Error scraping product {product_link}", e)
+        Logger.error(f"Error scraping product - {product_link}, Most Likely Captcha is detected!", e)
         raise e
     finally:
         Logger.info(f"Finished scraping product details : {product_link}")
@@ -360,9 +366,10 @@ async def scrape_product_details_from_urls_in_batch(product_links: list[Promotio
             for link in batch:
                 try:
                     product_details_list.append(await scrape_product_details_from_url(page, link))
+                    await sleep_randomly(DELAY_BETWEEN_LINKS)
                 except:
+                    await sleep_randomly(CAPTCHA_DETECTED_DELAY, 3)
                     pass
-                await sleep_randomly(DELAY_BETWEEN_LINKS)
 
         Logger.info(f"Completed batch {i // SCRAPING_URL_BATCH_SIZE + 1} of {total_batches}")
         await sleep_randomly(BATCH_SIZE_DELAY, 3)
@@ -374,6 +381,7 @@ async def scrape_product_details_from_urls_in_batch(product_links: list[Promotio
 
 async def startScraper() -> ProcessedProductDetails:
     Logger.info('Starting the Scraper')
+    start_time = time.time()
 
     await connect_to_database()
 
@@ -405,6 +413,12 @@ async def startScraper() -> ProcessedProductDetails:
 
             Logger.info(f"Retrying in {SCRAPER_RETRIES_DELAY} seconds...")
             await sleep_randomly(SCRAPER_RETRIES_DELAY, 2)
+
+    end_time = time.time()
+    total_time = end_time - start_time
+    hours, remainder = divmod(total_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    Logger.info(f"Scraper finished execution in {int(hours)} hours, {int(minutes)} minutes, and {int(seconds)} seconds")
 
     Logger.info('Ending the Scraper')
     return ProcessedProductDetails()

@@ -28,6 +28,10 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.54 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.80 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36"
 ]
 
 
@@ -36,12 +40,12 @@ async def get_browser(p):
     os.makedirs(user_data_dir, exist_ok=True)
 
     # Randomize geolocation within Farnham, UK area
-    latitude = 51.2150 + random.uniform(-0.05, 0.05)
-    longitude = -0.7986 + random.uniform(-0.05, 0.05)
+    latitude = 51.2150 + random.uniform(-0.1, 0.1)
+    longitude = -0.7986 + random.uniform(-0.1, 0.1)
 
-    # proxy_manager = ProxyManager()
-    # proxy = proxy_manager.get_random_proxy()
-    # proxy_server = f"http://{proxy[0]}:{proxy[1]}"
+    # Generate random hardware concurrency and device memory
+    hardware_concurrency = random.randint(4, 16)
+    device_memory = random.choice([4, 8, 16])
 
     browser = await p.chromium.launch_persistent_context(
         user_data_dir=user_data_dir,
@@ -58,6 +62,13 @@ async def get_browser(p):
             '--disable-extensions',
             '--disable-popup-blocking',
             '--disable-infobars',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-blink-features=AutomationControlled',
+            f'--device-memory={device_memory}',
+            f'--js-flags=--max-old-space-size={random.randint(2048, 4096)}',
         ],
         ignore_https_errors=True,
         accept_downloads=True,
@@ -65,10 +76,28 @@ async def get_browser(p):
         geolocation={'latitude': latitude, 'longitude': longitude},
         locale='en-GB',
         timezone_id='Europe/London',
+        device_scale_factor=1,
+        is_mobile=False,
+        has_touch=False,
     )
+
     pages = browser.pages
     if pages:
         page = pages[0]
     else:
         page = await browser.new_page()
+
+    # Set additional browser properties
+    await page.evaluate(f"""
+            Object.defineProperty(navigator, 'hardwareConcurrency', {{
+                get: () => {hardware_concurrency}
+            }});
+            Object.defineProperty(navigator, 'deviceMemory', {{
+                get: () => {device_memory}
+            }});
+            Object.defineProperty(navigator, 'platform', {{
+                get: () => 'Win32'
+            }});
+        """)
+
     return browser, page
