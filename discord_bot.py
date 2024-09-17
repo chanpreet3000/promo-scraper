@@ -103,7 +103,7 @@ class AmazonSearchBot(discord.Client):
         self.amazon_cron.cancel()
         await super().close()
 
-    @tasks.loop(time=datetime.time(hour=11, minute=0, tzinfo=datetime.timezone.utc))
+    @tasks.loop(time=datetime.time(hour=4, minute=0, tzinfo=datetime.timezone.utc))
     async def amazon_cron(self):
         try:
             Logger.info("Starting daily Amazon promotion check")

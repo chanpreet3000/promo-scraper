@@ -87,6 +87,7 @@ async def scraping_promo_products_from_search(search_term: str) -> list[str]:
                 await sleep_randomly(DELAY_BETWEEN_PAGES)
         except Exception as e:
             Logger.error(f"Error scraping search term: {search_term}", e)
+            raise e
 
         all_product_links = list(set(all_product_links))
         all_product_links = all_product_links[:LIMITING_RESULTS]
@@ -102,8 +103,11 @@ async def scraping_promo_products_from_searches() -> list[str]:
     search_items = await get_all_searches()
 
     for search_term in search_items:
-        all_product_links.extend(await scraping_promo_products_from_search(search_term))
-        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
+        try:
+            all_product_links.extend(await scraping_promo_products_from_search(search_term))
+            await sleep_randomly(DELAY_BETWEEN_SEARCHES)
+        except:
+            await sleep_randomly(CAPTCHA_DETECTED_DELAY, 5)
 
     all_product_links = list(set(all_product_links))
     Logger.info(f'Finished Scraping all promo products from searches. Found {len(all_product_links)} product links')
