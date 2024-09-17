@@ -242,7 +242,6 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
                 Logger.info(
                     f'Fetched {len(all_promotion_products)} products for search term: {search} and promo code: {promo_code}')
             except Exception as e:
-                Logger.error(f"Error scraping search term: {search}", e)
                 raise e
             finally:
                 await sleep_randomly(DELAY_BETWEEN_SEARCHES)
