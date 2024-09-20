@@ -4,7 +4,7 @@ import re
 from playwright.async_api import async_playwright
 
 from config import DELAY_BETWEEN_SEARCHES, DELAY_BETWEEN_PAGES, MAX_PAGES_TO_SCRAPE, DELAY_BETWEEN_LINKS, POST_CODE, \
-    SCRAPER_RETRIES, SCRAPER_RETRIES_DELAY, SCRAPING_URL_BATCH_SIZE, BATCH_SIZE_DELAY, DELAY_BETWEEN_STEPS, \
+    SCRAPING_URL_BATCH_SIZE, BATCH_SIZE_DELAY, DELAY_BETWEEN_STEPS, \
     MAX_SHOW_MORE_CLICKS, LIMITING_RESULTS, CAPTCHA_DETECTED_DELAY
 from db import get_all_searches, connect_to_database, process_products
 from logger import Logger
@@ -388,34 +388,26 @@ async def startScraper() -> ProcessedProductDetails:
 
     await connect_to_database()
 
-    for attempt in range(SCRAPER_RETRIES):
-        try:
-            await setup_amazon_uk()
-            await sleep_randomly(DELAY_BETWEEN_STEPS)
+    try:
+        await setup_amazon_uk()
+        await sleep_randomly(DELAY_BETWEEN_STEPS)
 
-            product_links = await scraping_promo_products_from_searches()
-            await sleep_randomly(DELAY_BETWEEN_STEPS)
+        product_links = await scraping_promo_products_from_searches()
+        await sleep_randomly(DELAY_BETWEEN_STEPS)
 
-            promo_codes = await scrape_promo_codes_from_urls_in_batch(product_links)
-            await sleep_randomly(DELAY_BETWEEN_STEPS)
+        promo_codes = await scrape_promo_codes_from_urls_in_batch(product_links)
+        await sleep_randomly(DELAY_BETWEEN_STEPS)
 
-            promotions_list = await scrape_links_from_promo_codes(promo_codes)
-            await sleep_randomly(DELAY_BETWEEN_STEPS)
+        promotions_list = await scrape_links_from_promo_codes(promo_codes)
+        await sleep_randomly(DELAY_BETWEEN_STEPS)
 
-            product_details_list = await scrape_product_details_from_urls_in_batch(promotions_list)
+        product_details_list = await scrape_product_details_from_urls_in_batch(promotions_list)
 
-            filtered_products = await process_products(product_details_list)
+        filtered_products = await process_products(product_details_list)
 
-            return filtered_products
-        except Exception as e:
-            Logger.critical(f"Attempt {attempt + 1} failed", e)
-
-            if attempt == SCRAPER_RETRIES - 1:
-                Logger.critical(f"All {SCRAPER_RETRIES} attempts failed. Aborting.")
-                raise
-
-            Logger.info(f"Retrying in {SCRAPER_RETRIES_DELAY} seconds...")
-            await sleep_randomly(SCRAPER_RETRIES_DELAY, 2)
+    except Exception as e:
+        Logger.critical(f"FAILED!! FAILED!! FAILED!! FAILED!! FAILED!! FAILED!! FAILED!! FAILED!!", e)
+        filtered_products = ProcessedProductDetails()
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -424,4 +416,4 @@ async def startScraper() -> ProcessedProductDetails:
     Logger.info(f"Scraper finished execution in {int(hours)} hours, {int(minutes)} minutes, and {int(seconds)} seconds")
 
     Logger.info('Ending the Scraper')
-    return ProcessedProductDetails()
+    return filtered_products

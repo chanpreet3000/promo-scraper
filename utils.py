@@ -4,6 +4,7 @@ import asyncio
 import random
 from datetime import datetime
 from dotenv import load_dotenv
+from itertools import cycle
 
 from logger import Logger
 
@@ -34,6 +35,8 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36"
 ]
 
+user_agent_cycle = cycle(USER_AGENTS)
+
 
 async def get_browser(p):
     user_data_dir = os.path.abspath("chrome_user_data")
@@ -54,7 +57,7 @@ async def get_browser(p):
             '--no-sandbox',
             '--ignore-certificate-errors',
             '--enable-features=NetworkService,NetworkServiceInProcess',
-            f'--user-agent={random.choice(USER_AGENTS)}',
+            f'--user-agent={next(user_agent_cycle)}',
             '--disable-extensions',
             '--disable-popup-blocking',
             '--disable-infobars',
