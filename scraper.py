@@ -197,10 +197,10 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
             Logger.info(f"Promotion title: {promotion_title} matches the regex")
         else:
             Logger.warn(f"Promotion title: {promotion_title} does not match the regex. Skipping...")
-            await sleep_randomly(DELAY_BETWEEN_PAGES)
+            await sleep_randomly(20, 3, 'Not a valid promotion')
             return all_promotion_products
 
-        await sleep_randomly(5, 0.5)
+        await sleep_randomly(5, 0.5, 'Waiting for page to load')
 
         search_list = await get_all_searches()
 
@@ -211,7 +211,7 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
                 # Input search term
                 await page.fill('#keywordSearchInputText', search)
                 await page.click('#keywordSearchBtn', timeout=60000)
-                await sleep_randomly(7, 1)
+                await sleep_randomly(7, 1, 'Waiting for search results')
                 for index in range(MAX_SHOW_MORE_CLICKS):
                     try:
                         show_more_button = await page.query_selector('#showMore.showMoreBtn')
@@ -219,7 +219,7 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
                             await show_more_button.scroll_into_view_if_needed(timeout=10000)
                             await show_more_button.click(timeout=10000)
                             Logger.info('Clicked "Show More" button')
-                            await sleep_randomly(7, 1)
+                            await sleep_randomly(7, 1, 'Waiting for more results')
                         else:
                             raise Exception("Show More button not found")
                     except:
@@ -244,12 +244,9 @@ async def scrape_links_from_promo_code(promo_code: str) -> list[Promotion]:
             except Exception as e:
                 raise e
             finally:
-                await sleep_randomly(DELAY_BETWEEN_SEARCHES)
+                Logger.info(
+                    f"Finished Scraping product urls for promo code: {promo_code}. Found {len(all_promotion_products)} products")
 
-        Logger.info(
-            f"Finished Scraping product urls for promo code: {promo_code}. Found {len(all_promotion_products)} products")
-
-        await sleep_randomly(DELAY_BETWEEN_SEARCHES)
         return all_promotion_products
 
 
@@ -265,6 +262,7 @@ async def scrape_links_from_promo_codes(promo_codes: set[str]) -> list[Promotion
                     f"Attempting coupon {coupon_index + 1}/{len(promo_codes)}, attempt {attempt + 1}/{max_attempts}")
                 promo_results = await scrape_links_from_promo_code(promo_code)
                 promotions_list.extend(promo_results)
+                await sleep_randomly(DELAY_BETWEEN_SEARCHES)
                 break
             except Exception as e:
                 Logger.error(
@@ -276,7 +274,7 @@ async def scrape_links_from_promo_codes(promo_codes: set[str]) -> list[Promotion
                 else:
                     Logger.info(
                         f"Retrying coupon {coupon_index + 1}/{len(promo_codes)}, attempt {attempt + 2}/{max_attempts} for promo code {promo_code}...")
-                    await sleep_randomly(2 * DELAY_BETWEEN_LINKS, 5)
+                    await sleep_randomly(20, 5, 'Retrying coupon')
     Logger.info(
         f'finished scraping product links from all promo codes. found {len(promotions_list)} items with promotions',
         promotions_list)

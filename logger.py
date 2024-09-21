@@ -18,7 +18,7 @@ class Logger:
     __logger.addHandler(__handler)
 
     @staticmethod
-    def __get_project_root():
+    def get_project_root():
         current_path = os.path.abspath(os.path.dirname(__file__))
         while True:
             # Check for common project root indicators
@@ -41,7 +41,7 @@ class Logger:
         file_name = frame.filename
         line_number = frame.lineno
 
-        project_root = Logger.__get_project_root()
+        project_root = Logger.get_project_root()
         relative_file_name = os.path.relpath(file_name, project_root)
         relative_file_name = f"./{relative_file_name.replace(os.sep, '/')}"
 
