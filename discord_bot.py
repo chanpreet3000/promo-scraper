@@ -103,7 +103,7 @@ class AmazonSearchBot(discord.Client):
         self.amazon_cron.cancel()
         await super().close()
 
-    @tasks.loop(time=datetime.time(hour=2, minute=0, tzinfo=datetime.timezone.utc))
+    @tasks.loop(time=datetime.time(hour=1, minute=0, tzinfo=datetime.timezone.utc))
     async def amazon_cron(self):
         await run_amazon_cron()
 
