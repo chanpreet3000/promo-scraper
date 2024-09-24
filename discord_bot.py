@@ -105,23 +105,7 @@ class AmazonSearchBot(discord.Client):
 
     @tasks.loop(time=datetime.time(hour=2, minute=0, tzinfo=datetime.timezone.utc))
     async def amazon_cron(self):
-        try:
-            Logger.info("Starting daily Amazon promotion check")
-
-            processed_data = await startScraper()
-
-            channel_ids = data_manager.get_notification_channels()
-
-            for channel_id in channel_ids:
-                channel = self.get_channel(channel_id)
-                if channel:
-                    await send_promo_notification_to_discord(channel, processed_data)
-                else:
-                    Logger.warn(f"Channel with ID {channel_id} not found")
-
-            Logger.info("Daily Amazon promotion check completed.")
-        except Exception as e:
-            Logger.critical("An error occurred in daily Amazon promotion check", e)
+        await run_amazon_cron()
 
     @amazon_cron.before_loop
     async def before_amazon_cron(self):
@@ -242,3 +226,35 @@ async def get_monthly_sales_cutoff(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
     await interaction.response.send_message(embed=embed)
+
+
+@client.tree.command(name="ap_run_scraper", description="Manually run the Amazon promotion scraper")
+@app_commands.checks.has_permissions(administrator=True)
+async def run_scraper(interaction: discord.Interaction):
+    Logger.info("Manual scraper run initiated")
+    embed = discord.Embed(
+        title="Manually Triggered Bot",
+        color=discord.Color.blue()
+    )
+    await interaction.response.send_message(embed=embed)
+    await run_amazon_cron()
+
+
+async def run_amazon_cron():
+    try:
+        Logger.info("Starting daily Amazon promotion check")
+
+        processed_data = await startScraper()
+
+        channel_ids = data_manager.get_notification_channels()
+
+        for channel_id in channel_ids:
+            channel = client.get_channel(channel_id)
+            if channel:
+                await send_promo_notification_to_discord(channel, processed_data)
+            else:
+                Logger.warn(f"Channel with ID {channel_id} not found")
+
+        Logger.info("Daily Amazon promotion check completed.")
+    except Exception as e:
+        Logger.critical("An error occurred in daily Amazon promotion check", e)

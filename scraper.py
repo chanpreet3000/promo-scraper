@@ -387,8 +387,8 @@ async def startScraper() -> ProcessedProductDetails:
     await connect_to_database()
 
     try:
-        await setup_amazon_uk()
-        await sleep_randomly(DELAY_BETWEEN_STEPS)
+        # await setup_amazon_uk()
+        # await sleep_randomly(DELAY_BETWEEN_STEPS)
 
         product_links = await scraping_promo_products_from_searches()
         await sleep_randomly(DELAY_BETWEEN_STEPS)
