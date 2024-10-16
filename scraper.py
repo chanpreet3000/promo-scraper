@@ -119,6 +119,7 @@ def check_promo_regex(text):
         r'^.*Get \d+ for the price of \d+.*$',
         r'^.*Get any.*$',
         r'^.*2 for.*$',
+        r'^.*Save £?\d+(\.\d{2})? on any .*$'
     ]
 
     # Check each pattern
